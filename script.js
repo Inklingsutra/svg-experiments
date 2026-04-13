@@ -201,13 +201,26 @@ function animate(timestamp) {
 
   const elapsed = (timestamp - startTime) / 1000;
 
-  // =========================
+    // =========================
+    // LOGO TRANSFORMS
+    // =========================
+
+    //const logoSymbol = document.querySelector('.logo-symbol');
+
+    //const breathe = 1 + Math.sin(elapsed * 2) * 0.03;
+
+    //logoSymbol.setAttribute(
+    //"transform",
+    //`translate(250,250) scale(${breathe}) translate(-250,-250)`
+    //);
+  
+    // =========================
   // HEX FIELD MOTION
   // =========================
     hexField.setAttribute(
     "transform",
     `rotate(${rotationAccum * 0.05} 250 250)`
-    );
+    );  
   // =========================
   // KALEIDOSCOPE TRANSFORMS
   // =========================
