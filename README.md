@@ -40,6 +40,16 @@ Then open `http://localhost:8000`.
 - add optional audio synchronization for BPM-driven effects
 - extract repeated DOM creation logic into reusable helpers
 
+## Milestone
+
+This milestone includes:
+- updated interactive SVG animation logic
+- responsive kaleidoscopic scene replication
+- enhanced hex grid reaction and pulse effects
+- improved visual motion and trail rendering
+
+The code is now committed and published as a milestone update.
+
 ## GitHub
 
 This repository has been initialized locally as a Git project. Add a remote and push to link it to your GitHub repository.
