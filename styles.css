@@ -2,6 +2,62 @@ body {
   margin: 0;
   background: black;
 }
+/* 
+.app {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+full screen container 
+
+display: grid;
+  place-items: center;*/
+.app {
+  width: 100vw;
+  height: 100vh;
+
+
+  justify-content: center;
+
+  background: radial-gradient(circle at center, #000 40%, #050510 100%);
+  pointer-events: none;
+}
+/* THIS is the key layer */
+.stage {
+  position: relative;
+
+  width: min(100vw, 100vh);
+  height: min(100vw, 100vh);
+
+  aspect-ratio: 1 / 1;
+}
+
+
+/* BOTH layers */
+.bg, .fg {
+  position: absolute;
+  inset: 0;
+
+  width: 100vw;
+  height: 100vh;
+
+  display: block;
+}
+
+.bg {
+  z-index: 1;
+  /* transform: scale(0.75); */
+  transform-origin: center;;
+}
+
+.fg {
+  z-index: 2;
+  pointer-events: none;
+  transform: none;
+}
+
+
 
 svg {
   width: 100vw;

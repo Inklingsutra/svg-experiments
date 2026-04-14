@@ -45,11 +45,13 @@ for (let i = 1; i < KALEIDO_COUNT; i++) {
 
   const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
 
-  use.setAttributeNS(
-    "http://www.w3.org/1999/xlink",
-    "href",
-    "#scene"
-  );
+  use.setAttribute("href", "#scene");
+
+ // use.setAttributeNS(
+ //   "http://www.w3.org/1999/xlink",
+ //   "href",
+ //   "#scene"
+ // );
 
   kaleidoContainer.appendChild(use);
 
