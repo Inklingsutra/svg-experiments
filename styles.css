@@ -8,6 +8,11 @@ svg {
   height: 100vh;
 }
 
+.logo {
+  transform-origin: center;
+  /*animation: rotate 10s linear infinite;*/
+}
+
 .shape {
   fill: none;
   stroke: cyan;
@@ -65,10 +70,7 @@ svg {
   opacity: 0.6;
 }
 
-.logo {
-  transform-origin: center;
-  /*animation: rotate 10s linear infinite;*/
-}
+
 
 @keyframes rotate {
   from { transform: rotate(0deg); }
