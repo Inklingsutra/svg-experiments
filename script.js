@@ -158,9 +158,257 @@ let rings = [];
 let lastHatTime = 0;
 const hatInterval = beatDuration / 4;
 // =========================
-// PROPAGATION PULSES (NEW)
+// AUDIO INPUT
 // =========================
+let audioCtx = null;
+let audioSource = null;
+let analyser = null;
+let analyserData = null;
+let audioElement = null;
+let fileInputElement = null;
+
+let subLevel = 0;
+let lowLevel = 0;
+let lowmidLevel = 0;
+let midLevel = 0;
+let highLevel = 0;
+let airLevel = 0;
+
+const FREQUENCY_BANDS = {
+  sub: [20, 60],
+  low: [60, 150],
+  lowmid: [150, 400],
+  mid: [400, 2000],
+  high: [2000, 8000],
+  air: [8000, 16000]
+};
+
 let pulses = [];
+let debugPanel = null;
+
+let HEX_INTENSITY = 1;
+let TRAIL_INTENSITY = 1;
+let RING_INTENSITY = 1;
+let PATH_INTENSITY = 1;
+
+function createDebugPanel() {
+  if (debugPanel) return;
+
+  debugPanel = document.createElement('div');
+  debugPanel.id = 'debugPanel';
+  debugPanel.innerHTML = `
+    <div class="debug-title">Audio Debug</div>
+    <div class="debug-row">sub: <span id="debug-sub">0</span></div>
+    <div class="debug-row">low: <span id="debug-low">0</span></div>
+    <div class="debug-row">lowmid: <span id="debug-lowmid">0</span></div>
+    <div class="debug-row">mid: <span id="debug-mid">0</span></div>
+    <div class="debug-row">high: <span id="debug-high">0</span></div>
+    <div class="debug-row">air: <span id="debug-air">0</span></div>
+    <div class="debug-section">Spectrum</div>
+    <div class="debug-bars" id="debug-bars"></div>
+    <button id="debug-play" type="button">Play</button>
+    <div class="debug-section">Controls</div>
+    <label class="debug-slider-row">hex intensity <span id="debug-hex-val">1.00</span></label>
+    <input id="debug-hex" type="range" min="0" max="2" step="0.01" value="1">
+    <label class="debug-slider-row">trail intensity <span id="debug-trail-val">1.00</span></label>
+    <input id="debug-trail" type="range" min="0" max="2" step="0.01" value="1">
+    <label class="debug-slider-row">ring intensity <span id="debug-ring-val">1.00</span></label>
+    <input id="debug-ring" type="range" min="0" max="2" step="0.01" value="1">
+    <label class="debug-slider-row">path intensity <span id="debug-path-val">1.00</span></label>
+    <input id="debug-path" type="range" min="0" max="2" step="0.01" value="1">
+  `;
+  document.body.appendChild(debugPanel);
+
+  const hexSlider = debugPanel.querySelector('#debug-hex');
+  const trailSlider = debugPanel.querySelector('#debug-trail');
+  const ringSlider = debugPanel.querySelector('#debug-ring');
+  const pathSlider = debugPanel.querySelector('#debug-path');
+
+  const hexVal = debugPanel.querySelector('#debug-hex-val');
+  const trailVal = debugPanel.querySelector('#debug-trail-val');
+  const ringVal = debugPanel.querySelector('#debug-ring-val');
+  const pathVal = debugPanel.querySelector('#debug-path-val');
+
+  const bindSlider = (slider, valueEl, setter) => {
+    slider.addEventListener('input', (event) => {
+      const value = Number(event.target.value);
+      setter(value);
+      valueEl.textContent = value.toFixed(2);
+    });
+  };
+
+  bindSlider(hexSlider, hexVal, (value) => { HEX_INTENSITY = value; });
+  bindSlider(trailSlider, trailVal, (value) => { TRAIL_INTENSITY = value; });
+  bindSlider(ringSlider, ringVal, (value) => { RING_INTENSITY = value; });
+  bindSlider(pathSlider, pathVal, (value) => { PATH_INTENSITY = value; });
+
+  const playButton = debugPanel.querySelector('#debug-play');
+  if (playButton) {
+    playButton.disabled = true;
+    playButton.addEventListener('click', () => {
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+      if (audioElement && audioElement.src && audioElement.paused) {
+        audioElement.play().catch(() => {});
+      }
+    });
+  }
+
+  const barsContainer = debugPanel.querySelector('#debug-bars');
+  if (barsContainer) {
+    for (let i = 0; i < 8; i += 1) {
+      const bar = document.createElement('div');
+      bar.className = 'debug-bar';
+      barsContainer.appendChild(bar);
+    }
+  }
+}
+
+function createKickDot() {
+  if (document.getElementById('debug-kick')) return;
+
+  const kickDot = document.createElement('div');
+  kickDot.id = 'debug-kick';
+  document.body.appendChild(kickDot);
+}
+
+function updateKickDot() {
+  const kickDot = document.getElementById('debug-kick');
+  if (!kickDot) return;
+
+  const scale = 1 + subLevel * 1.5;
+  kickDot.style.transform = `scale(${scale})`;
+  kickDot.style.opacity = Math.min(1, 0.3 + subLevel * 1.2);
+}
+
+function updateBarGraph() {
+  const barsContainer = debugPanel?.querySelector('#debug-bars');
+  if (!barsContainer || !analyserData) return;
+
+  const bars = Array.from(barsContainer.querySelectorAll('.debug-bar'));
+  if (!bars.length) return;
+
+  const step = Math.max(1, Math.floor(analyserData.length / bars.length));
+  bars.forEach((bar, index) => {
+    const start = index * step;
+    let sum = 0;
+    let count = 0;
+
+    for (let j = start; j < Math.min(start + step, analyserData.length); j += 1) {
+      sum += analyserData[j];
+      count += 1;
+    }
+
+    const value = count > 0 ? sum / count / 255 : 0;
+    bar.style.width = `${Math.max(4, value * 100)}%`;
+    bar.style.opacity = `${0.2 + value * 0.8}`;
+  });
+}
+
+function updateDebugPanel() {
+  if (!debugPanel) return;
+
+  debugPanel.querySelector('#debug-sub').textContent = subLevel.toFixed(3);
+  debugPanel.querySelector('#debug-low').textContent = lowLevel.toFixed(3);
+  debugPanel.querySelector('#debug-lowmid').textContent = lowmidLevel.toFixed(3);
+  debugPanel.querySelector('#debug-mid').textContent = midLevel.toFixed(3);
+  debugPanel.querySelector('#debug-high').textContent = highLevel.toFixed(3);
+  debugPanel.querySelector('#debug-air').textContent = airLevel.toFixed(3);
+  updateBarGraph();
+  updateKickDot();
+}
+
+function createAudioElements() {
+  if (!audioElement) {
+    audioElement = document.createElement('audio');
+    audioElement.style.display = 'none';
+    document.body.appendChild(audioElement);
+  }
+
+  if (!fileInputElement) {
+    fileInputElement = document.getElementById('audioUpload');
+  }
+
+  if (!fileInputElement) {
+    fileInputElement = document.createElement('input');
+    fileInputElement.type = 'file';
+    fileInputElement.accept = 'audio/*';
+    fileInputElement.id = 'audioUpload';
+    fileInputElement.style.position = 'fixed';
+    fileInputElement.style.top = '16px';
+    fileInputElement.style.right = '16px';
+    fileInputElement.style.zIndex = '9999';
+    fileInputElement.style.background = 'rgba(0,0,0,0.65)';
+    fileInputElement.style.color = '#fff';
+    fileInputElement.style.padding = '10px 12px';
+    fileInputElement.style.borderRadius = '999px';
+    fileInputElement.style.border = '1px solid rgba(255,255,255,0.18)';
+    fileInputElement.style.backdropFilter = 'blur(10px)';
+    document.body.appendChild(fileInputElement);
+  }
+
+  createDebugPanel();
+}
+
+function setupAudioContext() {
+  if (audioCtx || !audioElement) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 2048;
+  analyser.smoothingTimeConstant = 0.85;
+  analyserData = new Uint8Array(analyser.frequencyBinCount);
+  audioSource = audioCtx.createMediaElementSource(audioElement);
+  audioSource.connect(analyser);
+  analyser.connect(audioCtx.destination);
+}
+
+function computeFrequencyData() {
+  if (!analyser || !analyserData) return;
+  analyser.getByteFrequencyData(analyserData);
+}
+
+function computeBandLevel(minFreq, maxFreq) {
+  if (!audioCtx || !analyserData) return 0;
+  const nyquist = audioCtx.sampleRate / 2;
+  const lowIndex = Math.max(0, Math.floor((minFreq / nyquist) * analyserData.length));
+  const highIndex = Math.min(analyserData.length - 1, Math.ceil((maxFreq / nyquist) * analyserData.length));
+  let sum = 0;
+  let count = 0;
+  for (let i = lowIndex; i <= highIndex; i++) {
+    sum += analyserData[i];
+    count += 1;
+  }
+  return count > 0 ? sum / count / 255 : 0;
+}
+
+function updateAudioLevels() {
+  if (!audioElement || !audioElement.src || !analyser) return;
+  subLevel = computeBandLevel(...FREQUENCY_BANDS.sub);
+  lowLevel = computeBandLevel(...FREQUENCY_BANDS.low);
+  lowmidLevel = computeBandLevel(...FREQUENCY_BANDS.lowmid);
+  midLevel = computeBandLevel(...FREQUENCY_BANDS.mid);
+  highLevel = computeBandLevel(...FREQUENCY_BANDS.high);
+  airLevel = computeBandLevel(...FREQUENCY_BANDS.air);
+}
+
+function initAudioInput() {
+  createAudioElements();
+  if (!fileInputElement) return;
+
+  fileInputElement.addEventListener('change', (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    audioElement.src = url;
+    audioElement.load();
+    setupAudioContext();
+    const playButton = debugPanel?.querySelector('#debug-play');
+    if (playButton) {
+      playButton.disabled = false;
+    }
+  });
+}
 
 // =========================
 // HELPERS
@@ -199,6 +447,10 @@ function createTrail(d, transform, color) {
 // MAIN LOOP
 // =========================
 function animate(timestamp) {
+  computeFrequencyData();
+  updateAudioLevels();
+  updateDebugPanel();
+
   if (!startTime) startTime = timestamp;
 
   const elapsed = (timestamp - startTime) / 1000;
@@ -292,8 +544,8 @@ function animate(timestamp) {
     const bassDuration = beatDuration / 2;
     const bassProgress = (elapsed % bassDuration) / bassDuration;
 
-    let wobble =
-      Math.sin(bassProgress * Math.PI * 2 + p.phase) * 15;
+    let wobble = Math.sin(elapsed) * (1 + midLevel * 2 * PATH_INTENSITY);
+    wobble += Math.sin(bassProgress * Math.PI * 2 + p.phase) * 15;
 
     let interaction = 0;
 
@@ -305,6 +557,7 @@ function animate(timestamp) {
 
     interaction *= INTERACTION_STRENGTH;
     wobble += interaction * 10;
+    wobble *= PATH_INTENSITY;
 
     const d = `M150 250 
       Q${250 + wobble} 150 350 250 
@@ -433,7 +686,8 @@ function animate(timestamp) {
     // =========================
 
     // convert rotation to radians
-    const angle = rotation * Math.PI / 180;
+    let angle = rotation * Math.PI / 180;
+    angle += (baseSpeed + lowLevel * 0.05) * Math.PI / 180;
 
     // center coordinates
     const cx = h.x - 250;
@@ -450,7 +704,7 @@ function animate(timestamp) {
     const alt = Math.sin(elapsed * 2 + pattern * Math.PI);
 
     // combine
-    const finalInfluence = influence * (0.8 + 0.2 * alt);
+    const finalInfluence = influence * (0.8 + 0.2 * alt) * HEX_INTENSITY;
 
     const opacity = h.baseOpacity + finalInfluence * 0.6;
 
@@ -502,8 +756,9 @@ function animate(timestamp) {
 
     t.life += 0.02;
     const fade = 1 - t.life;
+    const trailAlpha = (0.2 + highLevel * 0.6) * TRAIL_INTENSITY;
 
-    t.el.style.opacity = Math.pow(fade, 2);
+    t.el.style.opacity = Math.pow(fade, 2) * trailAlpha;
 
     if (fade <= 0) {
       trailsGroup.removeChild(t.el);
@@ -524,7 +779,8 @@ function animate(timestamp) {
 
     r.life += 0.04;
 
-    const radius = 100 + r.life * 140;
+    let radius = 100 + r.life * 140;
+    radius += subLevel * 20 * RING_INTENSITY;
     const opacity = 1 - r.life;
 
     r.el.setAttribute("r", radius);
@@ -539,7 +795,18 @@ function animate(timestamp) {
   requestAnimationFrame(animate);
 }
 
+function startAudioSystem() {
+  initAudioInput();
+}
+
+window.addEventListener('click', () => {
+  if (audioCtx && audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
+});
+
 // =========================
 // START
 // =========================
+startAudioSystem();
 requestAnimationFrame(animate);

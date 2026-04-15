@@ -64,6 +64,110 @@ svg {
   height: 100vh;
 }
 
+#debugPanel {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 9999;
+  width: min(240px, calc(100vw - 32px));
+  padding: 10px 12px;
+  background: rgba(10, 10, 16, 0.75);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  color: #e8f5ff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  pointer-events: auto;
+}
+
+#debugPanel .debug-title {
+  margin-bottom: 6px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #a3d9ff;
+}
+
+#debugPanel .debug-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+#debugPanel .debug-row span {
+  color: #ffffff;
+}
+
+#debugPanel .debug-section {
+  margin-top: 10px;
+  margin-bottom: 6px;
+  font-size: 11px;
+  color: #96caff;
+  letter-spacing: 0.05em;
+}
+
+#debugPanel .debug-slider-row {
+  display: flex;
+  justify-content: space-between;
+  margin: 10px 0 4px;
+  font-size: 11px;
+  color: #d9e9ff;
+}
+
+#debugPanel input[type="range"] {
+  width: 100%;
+  accent-color: #7ec0ff;
+}
+
+#debugPanel button {
+  width: 100%;
+  padding: 8px 10px;
+  margin-top: 8px;
+  border: 1px solid rgba(126, 192, 255, 0.35);
+  border-radius: 10px;
+  background: rgba(20, 28, 42, 0.9);
+  color: #d9e9ff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+#debugPanel button:hover {
+  background: rgba(28, 42, 64, 0.95);
+}
+
+#debug-bars {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+  margin: 8px 0 10px;
+  height: 18px;
+  align-items: end;
+}
+
+.debug-bar {
+  background: rgba(126, 192, 255, 0.7);
+  height: 100%;
+  width: 6px;
+  border-radius: 999px;
+  transition: width 0.08s ease, opacity 0.08s ease;
+}
+
+#debug-kick {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 16px rgba(255, 255, 255, 0.45);
+  transform-origin: center;
+  pointer-events: none;
+  z-index: 9998;
+  transition: transform 0.08s ease, opacity 0.08s ease;
+}
+
 .logo {
   transform-origin: center;
   /*animation: rotate 10s linear infinite;*/
