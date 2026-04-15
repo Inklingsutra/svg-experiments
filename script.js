@@ -4,7 +4,7 @@
 const kaleidoContainer = document.querySelector('.kaleido-container');
 const scene = document.querySelector('#scene');
 
-const KALEIDO_COUNT = 6;
+const KALEIDO_COUNT = 6; // number of kaleidoscope segments (including original)
 
 const rotator = document.querySelector('.rotator');
 const logo = document.querySelector('.logo');
@@ -109,13 +109,17 @@ let hexData = hexes.map((hex) => {
 // =========================
 // BPM
 // =========================
-const BPM = 175;
-const beatDuration = 60 / BPM;
+let BPM = 175;
+let beatDuration = 60 / BPM;
 
 // =========================
 // INTERACTION
 // =========================
 const INTERACTION_STRENGTH = 0.25;
+const BASE_IDLE_SPEED = 14; // slow meditative drift when no music is playing
+const ROTATION_SMOOTHING = 0.24;
+const AUDIO_SMOOTHING = 0.14;
+const PATH_WOBBLE_SMOOTHING = 0.13;
 
 // =========================
 // MULTI PATH SYSTEM
@@ -140,12 +144,11 @@ for (let i = 0; i < NUM_PATHS; i++) {
     length,
     phase: i * (Math.PI / 2),
     sampleX: 250,
-    sampleY: 250
+    sampleY: 250,
+    smoothedWobble: 1
   });
 }
 
-// =========================
-// STATE
 // =========================
 let startTime = null;
 let rotationAccum = 0;
@@ -190,6 +193,12 @@ let HEX_INTENSITY = 1;
 let TRAIL_INTENSITY = 1;
 let RING_INTENSITY = 1;
 let PATH_INTENSITY = 1;
+let smoothedRotationSpeed = 0;
+let lastTimestamp = null;
+
+function lerp(start, end, t) {
+  return start + (end - start) * t;
+}
 
 function createDebugPanel() {
   if (debugPanel) return;
@@ -208,6 +217,8 @@ function createDebugPanel() {
     <div class="debug-bars" id="debug-bars"></div>
     <button id="debug-play" type="button">Play</button>
     <div class="debug-section">Controls</div>
+    <label class="debug-slider-row">BPM <span id="debug-bpm-val">175</span></label>
+    <input id="debug-bpm" type="range" min="40" max="240" step="1" value="175">
     <label class="debug-slider-row">hex intensity <span id="debug-hex-val">1.00</span></label>
     <input id="debug-hex" type="range" min="0" max="2" step="0.01" value="1">
     <label class="debug-slider-row">trail intensity <span id="debug-trail-val">1.00</span></label>
@@ -241,6 +252,18 @@ function createDebugPanel() {
   bindSlider(trailSlider, trailVal, (value) => { TRAIL_INTENSITY = value; });
   bindSlider(ringSlider, ringVal, (value) => { RING_INTENSITY = value; });
   bindSlider(pathSlider, pathVal, (value) => { PATH_INTENSITY = value; });
+
+  const bpmInput = debugPanel.querySelector('#debug-bpm');
+  const bpmLabel = debugPanel.querySelector('#debug-bpm-val');
+  if (bpmInput && bpmLabel) {
+    bpmInput.addEventListener('input', (event) => {
+      const value = Number(event.target.value);
+      if (!Number.isFinite(value) || value < 40) return;
+      BPM = value;
+      beatDuration = 60 / BPM;
+      bpmLabel.textContent = BPM.toFixed(0);
+    });
+  }
 
   const playButton = debugPanel.querySelector('#debug-play');
   if (playButton) {
@@ -383,13 +406,28 @@ function computeBandLevel(minFreq, maxFreq) {
 }
 
 function updateAudioLevels() {
-  if (!audioElement || !audioElement.src || !analyser) return;
-  subLevel = computeBandLevel(...FREQUENCY_BANDS.sub);
-  lowLevel = computeBandLevel(...FREQUENCY_BANDS.low);
-  lowmidLevel = computeBandLevel(...FREQUENCY_BANDS.lowmid);
-  midLevel = computeBandLevel(...FREQUENCY_BANDS.mid);
-  highLevel = computeBandLevel(...FREQUENCY_BANDS.high);
-  airLevel = computeBandLevel(...FREQUENCY_BANDS.air);
+  let targetSub = 0;
+  let targetLow = 0;
+  let targetLowmid = 0;
+  let targetMid = 0;
+  let targetHigh = 0;
+  let targetAir = 0;
+
+  if (audioElement && audioElement.src && analyser) {
+    targetSub = computeBandLevel(...FREQUENCY_BANDS.sub);
+    targetLow = computeBandLevel(...FREQUENCY_BANDS.low);
+    targetLowmid = computeBandLevel(...FREQUENCY_BANDS.lowmid);
+    targetMid = computeBandLevel(...FREQUENCY_BANDS.mid);
+    targetHigh = computeBandLevel(...FREQUENCY_BANDS.high);
+    targetAir = computeBandLevel(...FREQUENCY_BANDS.air);
+  }
+
+  subLevel = lerp(subLevel, targetSub, AUDIO_SMOOTHING);
+  lowLevel = lerp(lowLevel, targetLow, AUDIO_SMOOTHING);
+  lowmidLevel = lerp(lowmidLevel, targetLowmid, AUDIO_SMOOTHING);
+  midLevel = lerp(midLevel, targetMid, AUDIO_SMOOTHING);
+  highLevel = lerp(highLevel, targetHigh, AUDIO_SMOOTHING);
+  airLevel = lerp(airLevel, targetAir, AUDIO_SMOOTHING);
 }
 
 function initAudioInput() {
@@ -452,7 +490,8 @@ function animate(timestamp) {
   updateDebugPanel();
 
   if (!startTime) startTime = timestamp;
-
+  const dt = lastTimestamp ? Math.min((timestamp - lastTimestamp) / 1000, 0.033) : 0.016;
+  lastTimestamp = timestamp;
   const elapsed = (timestamp - startTime) / 1000;
 
     // =========================
@@ -503,11 +542,13 @@ function animate(timestamp) {
   // =========================
   // ROTATION
   // =========================
-  const baseSpeed = 360 / (beatDuration * 16);
-  const mod = Math.sin(elapsed * 2) * 0.3;
+  const audioMomentum = lowLevel * 170;
+  const kickBoost = subLevel * 90;
+  const targetRotationSpeed = BASE_IDLE_SPEED + audioMomentum + kickBoost;
+  smoothedRotationSpeed = lerp(smoothedRotationSpeed, targetRotationSpeed, ROTATION_SMOOTHING);
 
-  const rotationSpeed = baseSpeed * (1 + mod);
-  rotationAccum += rotationSpeed * (1 / 60);
+  const shimmer = 1 + highLevel * 0.16;
+  rotationAccum += smoothedRotationSpeed * dt * shimmer;
 
   const rotation = rotationAccum;
 
@@ -521,7 +562,7 @@ function animate(timestamp) {
   // =========================
   const beatProgress = (elapsed % beatDuration) / beatDuration;
   const pulse = Math.pow(Math.sin(beatProgress * Math.PI), 2);
-  const scale = 1 + pulse * 0.12;
+  const scale = 1 + pulse * 0.13;
 
   const spiral = Math.sin(elapsed * 0.8) * 20;
 
@@ -543,9 +584,18 @@ function animate(timestamp) {
 
     const bassDuration = beatDuration / 2;
     const bassProgress = (elapsed % bassDuration) / bassDuration;
+    const angle = rotation * Math.PI / 170;
 
-    let wobble = Math.sin(elapsed) * (1 + midLevel * 2 * PATH_INTENSITY);
-    wobble += Math.sin(bassProgress * Math.PI * 2 + p.phase) * 15;
+    const bassPulse = Math.sin(bassProgress * Math.PI * 2 + p.phase) * 15 * (1 + lowLevel * 0.6);
+    const shimmerPulse = Math.sin(elapsed * 12 + p.phase) * highLevel * 7;
+    const targetWobble = Math.sin(elapsed + p.phase) * (1 + midLevel * 2 * PATH_INTENSITY) + bassPulse + shimmerPulse;
+
+    p.smoothedWobble = lerp(p.smoothedWobble, targetWobble, PATH_WOBBLE_SMOOTHING);
+    let wobble = p.smoothedWobble;
+
+    // add directional bias (THIS is key)
+    const offsetX = Math.cos(angle + p.phase) * 20;
+    const offsetY = Math.sin(angle + p.phase) * 20;
 
     let interaction = 0;
 
@@ -559,9 +609,12 @@ function animate(timestamp) {
     wobble += interaction * 10;
     wobble *= PATH_INTENSITY;
 
-    const d = `M150 250 
-      Q${250 + wobble} 150 350 250 
-      Q${250 - wobble} 350 150 250`;
+   // const d = `M150 250 
+   //   Q${250 + wobble} 150 350 250 
+   //   Q${250 - wobble} 350 150 250`;
+    const d = `M${150 + offsetX} ${250 + offsetY}
+    Q${250 + wobble} ${150 + offsetY} ${350 + offsetX} ${250 + offsetY}
+    Q${250 - wobble} ${350 + offsetY} ${150 + offsetX} ${250 + offsetY}`;
 
     p.el.setAttribute("d", d);
 
@@ -579,8 +632,8 @@ function animate(timestamp) {
     p.el.style.opacity = 0.6 + intensity * 0.4;
 
     if (elapsed - lastTrailTime > trailInterval && i === 0) {
-      const combined =
-        `rotate(${rotation} 250 250) ` + logoTransform;
+      const combined = logoTransform;
+        //`rotate(${rotation} 250 250) ` + logoTransform;
 
       trails.push(createTrail(d, combined, p.el.style.stroke));
       lastTrailTime = elapsed;
@@ -687,7 +740,7 @@ function animate(timestamp) {
 
     // convert rotation to radians
     let angle = rotation * Math.PI / 180;
-    angle += (baseSpeed + lowLevel * 0.05) * Math.PI / 180;
+    angle += (BASE_IDLE_SPEED + lowLevel * 0.05) * Math.PI / 180;
 
     // center coordinates
     const cx = h.x - 250;
