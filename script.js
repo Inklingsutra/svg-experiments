@@ -11,9 +11,10 @@ const logo = document.querySelector('.logo');
 const wavesGroup = document.querySelector('.waves');
 const ringsGroup = document.querySelector('.rings');
 const trailsGroup = document.querySelector('.trails');
+const mandalaGroup = document.querySelector('.mandala');
 const hexField = document.querySelector('.hex-field');
 
-if (!rotator || !logo || !wavesGroup || !ringsGroup || !trailsGroup || !hexField) {
+if (!rotator || !logo || !wavesGroup || !ringsGroup || !trailsGroup || !mandalaGroup || !hexField) {
   console.error("Missing SVG elements");
   throw new Error("Fix SVG structure");
 }
@@ -158,6 +159,9 @@ let lastTrailTime = 0;
 const trailInterval = beatDuration / 3;
 
 let rings = [];
+let mandalaTriangles = [];
+let mandalaArrows = [];
+let mandalaPetals = [];
 let lastHatTime = 0;
 const hatInterval = beatDuration / 4;
 // =========================
@@ -480,7 +484,102 @@ function createTrail(d, transform, color) {
 
   return { el: t, life: 0 };
 }
+function createMandala() {
+  if (!mandalaGroup) return;
 
+  const cx = 250;
+  const cy = 250;
+  const triangleSizes = [82, 108, 134];
+
+  triangleSizes.forEach((size, index) => {
+    const triangle = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+    const points = [
+      `${cx},${cy - size}`,
+      `${cx - size * 0.87},${cy + size * 1.5}`,
+      `${cx + size * 0.87},${cy + size * 1.5}`
+    ].join(' ');
+    triangle.setAttribute('points', points);
+    triangle.classList.add('mandala-triangle');
+    triangle.style.fill = 'none';
+    triangle.style.stroke = `hsla(${190 + index * 12}, 100%, 84%, 0.82)`;
+    triangle.style.strokeWidth = 1.4 + index * 0.6;
+    triangle.style.opacity = 0.45;
+    mandalaGroup.appendChild(triangle);
+    mandalaTriangles.push(triangle);
+  });
+
+  const segmentCount = 12;
+  for (let i = 0; i < segmentCount; i += 1) {
+    const angle = (360 / segmentCount) * i;
+    const arrow = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    const tailLength = 90;
+    const headLength = 18;
+    const pathData = `M${cx},${cy} L${cx},${cy - tailLength} L${cx - 6},${cy - tailLength - headLength} L${cx},${cy - tailLength} L${cx + 6},${cy - tailLength - headLength}`;
+    arrow.setAttribute('d', pathData);
+    arrow.setAttribute('transform', `rotate(${angle} ${cx} ${cy})`);
+    arrow.classList.add('mandala-arrow');
+    arrow.style.fill = 'none';
+    arrow.style.stroke = `hsl(132, 100%, 50%)`;
+    arrow.style.strokeWidth = 1.7;
+    arrow.style.opacity = 0.42;
+    mandalaGroup.appendChild(arrow);
+    mandalaArrows.push(arrow);
+  }
+
+  const petalCount = 8;
+  for (let i = 0; i < petalCount; i += 1) {
+    const petal = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    petal.setAttribute(
+      'd',
+      `M${cx},${cy - 88} C${cx + 18},${cy - 84} ${cx + 26},${cy - 58} ${cx},${cy - 40} C${cx - 26},${cy - 58} ${cx - 18},${cy - 84} ${cx},${cy - 88} Z`
+    );
+    petal.setAttribute('transform', `rotate(${45 * i} ${cx} ${cy})`);
+    petal.classList.add('mandala-petal');
+    petal.style.fill = 'none';
+    petal.style.stroke = `hsl(190, 66%, 50%)`;
+    petal.style.strokeWidth = 1.6;
+    petal.style.opacity = 0.32;
+    mandalaGroup.appendChild(petal);
+    mandalaPetals.push(petal);
+  }
+}
+
+function updateMandala(elapsed) {
+  if (!mandalaGroup) return;
+
+  const rotationOffset = -(elapsed * 3 + subLevel * 55 + lowLevel * 32);
+  const pulseScale = 1 + subLevel * 0.05 + lowLevel * 0.03;
+  const radialScale = 1 + midLevel * 0.18;
+
+  mandalaGroup.setAttribute(
+    'transform',
+    `translate(250 250) rotate(${rotationOffset}) scale(${pulseScale * radialScale}) translate(-250 -250)`
+  );
+
+  mandalaTriangles.forEach((triangle, index) => {
+    const scale = 1 + midLevel * 0.03 + index * 0.01;
+    triangle.style.opacity = 0.60 + highLevel * 0.4;
+    triangle.style.strokeWidth = 1.2 + highLevel * 0.9;
+    triangle.setAttribute(
+      'transform',
+      `translate(250 250) rotate(${ rotationOffset * (index % 2 === 0 ? 1 : -1)} 0 0) scale(${scale}) translate(-250 -250)`
+    );
+  });
+
+  mandalaArrows.forEach((arrow, index) => {
+    const baseAngle = (360 / mandalaArrows.length) * index;
+    const arrowScale = 0.5 + midLevel * 0.08 + ((index % 2) * 0.04);
+    arrow.style.strokeOpacity = 0.16 + highLevel * 0.44;
+    arrow.style.strokeWidth = 1.2 + midLevel * 0.8;
+    arrow.setAttribute('transform', `rotate(${baseAngle + rotationOffset + midLevel * 12} 250 250) scale(${arrowScale})`);
+  });
+
+  mandalaPetals.forEach((petal, index) => {
+    petal.style.strokeOpacity = 0.18 + highLevel * 0.32;
+    petal.style.strokeWidth = 0.5 + highLevel * 0.85;
+    petal.setAttribute('transform', `translate(250 250) rotate(${45 * index + midLevel * 12} 0 0) translate(-250 -250)`);
+  });
+}
 // =========================
 // MAIN LOOP
 // =========================
@@ -575,8 +674,7 @@ function animate(timestamp) {
     translate(-250,-250)
   `;
 
-  logo.setAttribute("transform", logoTransform);
-
+  logo.setAttribute("transform", logoTransform);  updateMandala(elapsed);
   // =========================
   // PATHS + INTERACTION
   // =========================
@@ -861,5 +959,6 @@ window.addEventListener('click', () => {
 // =========================
 // START
 // =========================
+createMandala();
 startAudioSystem();
 requestAnimationFrame(animate);

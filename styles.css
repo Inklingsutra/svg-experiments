@@ -56,8 +56,42 @@ display: grid;
   pointer-events: none;
   transform: none;
 }
+/*
+.fg .is-logo-inner {
+  filter: url(#halo);
+}
+*/
+.fg .is-logo-inner {
+  filter:
+    drop-shadow(0 0 80px rgba(0, 0, 0, 1))
+    drop-shadow(0 0 40px rgba(0, 0, 0, 0.8))
+    drop-shadow(0 0 20px rgba(0, 0, 0, 0.6))
+    drop-shadow(0 0 10px rgba(0, 0, 0, 0.4));
+}
 
+.mandala {
+  mix-blend-mode: screen;
+  filter: drop-shadow(0 0 28px rgba(6, 144, 40, 0.3));
+}
 
+.mandala-triangle {
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.mandala-arrow {
+  stroke-linecap: round;
+  shape-rendering: geometricPrecision;
+}
+
+.mandala-petal {
+  stroke-linejoin: round;
+  shape-rendering: crispEdges;
+}
+
+.mandala-dot {
+  filter: drop-shadow(0 0 10px rgba(2, 226, 107, 0.862));
+}
 
 svg {
   width: 100vw;
